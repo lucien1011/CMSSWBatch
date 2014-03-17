@@ -11,3 +11,4 @@ Recipe:
 
 Tags:
   * V00-00-00: Initial commit
+  * V00-00-01: Added output file name functionality to launch_analysis script
