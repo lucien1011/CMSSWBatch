@@ -11,11 +11,13 @@ import argparse
 #----------------------------------------------------------------------------
 
 parser = argparse.ArgumentParser(description='Launch an analysis')
-parser.add_argument('-c', metavar='CFG'      , dest='input_python_cfg',action="store", required=True, help='Input CMSSW python config file')
-parser.add_argument('-w', metavar="WORKDIR"  , dest='workdir'         ,action="store", required=True, help='Local working directory')
-parser.add_argument('-n', metavar='NJOBS'    , dest='njobs'           ,action="store", required=True, type=int, help='Number of jobs')
-parser.add_argument('-q', metavar='QUEUE'    , dest='queue'           ,action="store", required=True, help='Batch queue')
-parser.add_argument('-i', metavar='INPUTLIST', dest='input_list'      ,action="store", required=True, help='Input list of files to run on')
+parser.add_argument('-c', metavar='CFG'       , dest='input_python_cfg',action="store", required=True, help='Input CMSSW python config file')
+parser.add_argument('-w', metavar="WORKDIR"   , dest='workdir'         ,action="store", required=True, help='Local working directory')
+parser.add_argument('-n', metavar='NJOBS'     , dest='njobs'           ,action="store", required=True, type=int, help='Number of jobs')
+parser.add_argument('-q', metavar='QUEUE'     , dest='queue'           ,action="store", required=True, help='Batch queue')
+parser.add_argument('-i', metavar='INPUTLIST' , dest='input_list'      ,action="store", required=True, help='Input list of files to run on')
+parser.add_argument('-o', metavar='OUTPUTFILE', dest='output_file'     ,action="store", required=True, help='Name of the output file')
+parser.add_argument('-t', metavar='GLOBALTAG' , dest='global_tag'      ,action="store", required=True, help='GlobalTag to use')
 args = parser.parse_args()
 
 #----------------------------------------------------------------------------
@@ -84,11 +86,13 @@ for ijob in range (0, njobs_updated):
     
     cp_command     = "cp " + args.input_python_cfg + " " + new_cfg_file_path
     perl_command_1 = "perl -pi -e 's/#FILENAMES/" + input_list_data + "/g' " + new_cfg_file_path
-    perl_command_2 = "perl -pi -e 's/JOBNUMBER/" + str(ijob) + "/g' " + new_cfg_file_path
+    perl_command_2 = "perl -pi -e 's/OUTPUTFILENAME/" + args.output_file + "_" + str(ijob) + "/g' " + new_cfg_file_path
+    perl_command_3 = "perl -pi -e 's/GLOBALTAG/" + args.global_tag + "/g' " + new_cfg_file_path
     
     os.system ( cp_command     )
     os.system ( perl_command_1 )
     os.system ( perl_command_2 )
+    os.system ( perl_command_3 )
 
     cfg_file_paths.append ( new_cfg_file_path ) 
 
