@@ -18,7 +18,30 @@ parser.add_argument('-q', metavar='QUEUE'     , dest='queue'           ,action="
 parser.add_argument('-i', metavar='INPUTLIST' , dest='input_list'      ,action="store", required=True, help='Input list of files to run on')
 parser.add_argument('-o', metavar='OUTPUTFILE', dest='output_file'     ,action="store", required=True, help='Name of the output file')
 parser.add_argument('-t', metavar='GLOBALTAG' , dest='global_tag'      ,action="store", required=True, help='GlobalTag to use')
+parser.add_argument('-e', metavar='EOSDIR'    , dest='eos_directory'   ,action="store", required=False,help='EOS output directory (optional)')
 args = parser.parse_args()
+
+#----------------------------------------------------------------------------
+# Should we write this out to EOS?
+# If we should, then make the EOS directory
+#----------------------------------------------------------------------------
+
+write_to_eos = False
+if args.eos_directory:
+    write_to_eos = True
+    get_eos_bin = 'find /afs/cern.ch/project/eos/installation/ -name "eos.select" | xargs ls -rt1 | tail -1'
+    eos_bin = sp.Popen ( get_eos_bin, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
+    eos_directory_contents_stderr = sp.Popen ( eos_bin + " ls " + args.eos_directory, shell=True, stdout=sp.PIPE, stderr=sp.PIPE ).communicate()[1]
+    eos_directory_exists = False
+    if not eos_directory_contents_stderr:
+        eos_directory_exists = True
+    if eos_directory_exists :
+        print "EOS directory you specified already exists:"
+        print "\t", args.eos_directory
+        print "Remove it or choose a new directory to continue"
+        sys.exit()
+    else:
+        os.system ( eos_bin + " mkdir -p " + args.eos_directory )
 
 #----------------------------------------------------------------------------
 # Make work directories
