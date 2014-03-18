@@ -97,6 +97,7 @@ for ijob in range (0, njobs_updated):
 #----------------------------------------------------------------------------
 
 cfg_file_paths = []
+output_files = []
 
 for ijob in range (0, njobs_updated):
     new_cfg_file_name = args.input_python_cfg.replace("_cfg.py", "_" + str(ijob) + "_cfg.py")
@@ -106,10 +107,13 @@ for ijob in range (0, njobs_updated):
     input_list_raw_data = input_list.read()
     input_list_data = input_list_raw_data.replace("/","\/")
     input_list.close()
+
+    output_file_prefix = args.output_file + "_" + str(ijob)
+    output_file = output_file_prefix + ".root"
     
     cp_command     = "cp " + args.input_python_cfg + " " + new_cfg_file_path
     perl_command_1 = "perl -pi -e 's/#FILENAMES/" + input_list_data + "/g' " + new_cfg_file_path
-    perl_command_2 = "perl -pi -e 's/OUTPUTFILENAME/" + args.output_file + "_" + str(ijob) + "/g' " + new_cfg_file_path
+    perl_command_2 = "perl -pi -e 's/OUTPUTFILENAME/" + output_file_prefix + "/g' " + new_cfg_file_path
     perl_command_3 = "perl -pi -e 's/GLOBALTAG/" + args.global_tag + "/g' " + new_cfg_file_path
     
     os.system ( cp_command     )
@@ -118,6 +122,7 @@ for ijob in range (0, njobs_updated):
     os.system ( perl_command_3 )
 
     cfg_file_paths.append ( new_cfg_file_path ) 
+    output_files.append ( output_file )
 
 #----------------------------------------------------------------------------
 # Make src files for batch
@@ -132,6 +137,9 @@ for ijob in range (0, njobs_updated):
     src_file.write("eval `scramv1 runtime -sh`\n")
     src_file.write("cd " + workdir_output + "\n")
     src_file.write("cmsRun " + cfg_file_paths[ijob] + "\n")
+    if write_to_eos:
+        src_file.write("xrdcp " + output_file + " file://" + args.eos_directory.strip() + "/" + output_file + "\n")
+        src_file.write("rm " + output_file)
     src_file.close()
     src_file_paths.append ( src_file_path ) 
 
