@@ -10,6 +10,8 @@ import argparse
 # Get important variables
 #----------------------------------------------------------------------------
 
+print "*** Parsing input"
+
 parser = argparse.ArgumentParser(description='Launch an analysis')
 parser.add_argument('-c', metavar='CFG'       , dest='input_python_cfg',action="store", required=True, help='Input CMSSW python config file')
 parser.add_argument('-w', metavar="WORKDIR"   , dest='workdir'         ,action="store", required=True, help='Local working directory')
@@ -26,26 +28,34 @@ args = parser.parse_args()
 # If we should, then make the EOS directory
 #----------------------------------------------------------------------------
 
+print "*** Setting up EOS"
+
 write_to_eos = False
 if args.eos_directory:
     write_to_eos = True
     get_eos_bin = 'find /afs/cern.ch/project/eos/installation/ -name "eos.select" | xargs ls -rt1 | tail -1'
     eos_bin = sp.Popen ( get_eos_bin, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
-    eos_directory_contents_stderr = sp.Popen ( eos_bin + " ls " + args.eos_directory, shell=True, stdout=sp.PIPE, stderr=sp.PIPE ).communicate()[1]
+    print "*** EOS bin =", eos_bin
+    eos_command = eos_bin + " ls " + args.eos_directory
+    print "*** EOS command =", eos_command
+    eos_directory_contents_stderr = sp.Popen ( eos_command, shell=True, stdout=sp.PIPE, stderr=sp.PIPE ).communicate()[1]
     eos_directory_exists = False
     if not eos_directory_contents_stderr:
         eos_directory_exists = True
+    print "*** EOS directory exists?", eos_directory_exists
     if eos_directory_exists :
-        print "EOS directory you specified already exists:"
+        print "*** Warning. EOS directory you specified already exists:"
         print "\t", args.eos_directory
-        print "Remove it or choose a new directory to continue"
-        sys.exit()
     else:
+        print "*** Making EOS directory you specified:"
+        print "\t", args.eos_directory
         os.system ( eos_bin + " mkdir -p " + args.eos_directory )
 
 #----------------------------------------------------------------------------
 # Make work directories
 #----------------------------------------------------------------------------
+
+print "*** Making work directories"
 
 workdir = args.workdir
 workdir_input_lists = workdir + "/input_lists" 
@@ -71,6 +81,8 @@ os.system ("mkdir -p " + workdir_log )
 # Make input lists
 #----------------------------------------------------------------------------
 
+print "*** Making input lists"
+
 if not os.path.isfile ( args.input_list ):
     print "Input list you specified does not exist:"
     print "\t", args.input_list 
@@ -95,6 +107,8 @@ for ijob in range (0, njobs_updated):
 #----------------------------------------------------------------------------
 # Make python cfgs
 #----------------------------------------------------------------------------
+
+print "*** Making python cfgs"
 
 cfg_file_paths = []
 output_files = []
@@ -128,6 +142,10 @@ for ijob in range (0, njobs_updated):
 # Make src files for batch
 #----------------------------------------------------------------------------
 
+print "*** Making batch src files"
+
+scratch_dir = "/tmp/" + os.environ["USER"]
+
 src_file_paths = []
 for ijob in range (0, njobs_updated):
     src_file_path = workdir_lxbatch_src + "/submit_" + str ( ijob ) + ".sh"
@@ -136,16 +154,20 @@ for ijob in range (0, njobs_updated):
     src_file.write("cd " + os.environ["CMSSW_BASE"] + "\n")
     src_file.write("eval `scramv1 runtime -sh`\n")
     src_file.write("cd " + workdir_output + "\n")
+    if write_to_eos:
+        src_file.write("cd " + scratch_dir + "\n")
     src_file.write("cmsRun " + cfg_file_paths[ijob] + "\n")
     if write_to_eos:
-        src_file.write("xrdcp " + output_file + " file://" + args.eos_directory.strip() + "/" + output_file + "\n")
-        src_file.write("rm " + output_file)
+        src_file.write("xrdcp " + output_files[ijob] + " root://eoscms/" + args.eos_directory.strip() + "/" + output_files[ijob] + "\n")
+        src_file.write("rm " + output_files[ijob])
     src_file.close()
     src_file_paths.append ( src_file_path ) 
 
 #----------------------------------------------------------------------------
 # Make launch path
 #----------------------------------------------------------------------------
+
+print "*** Writing submit commands"
 
 launch_file = open("launch.sh","w")
 for ijob in range (0, njobs_updated):
