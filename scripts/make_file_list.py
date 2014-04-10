@@ -12,25 +12,56 @@ import argparse
 #----------------------------------------------------------------------------
 
 parser = argparse.ArgumentParser(description='Make an input list')
-parser.add_argument('-i', metavar='INPUT' , dest='input_folders',action="append", required=True, help='List of EOS folders to be used as input')
+parser.add_argument('-i', metavar='INPUT' , dest='input_folders',action="append", required=True, help='List of EOS or dCache folders to be used as input')
 parser.add_argument('-o', metavar="OUTPUT", dest='output_folder',action="store" , required=True, help='Output folder where input list will be stored')
 args = parser.parse_args()
 
 #----------------------------------------------------------------------------
-# Get the latest/greatest EOS binary
+# Is there an EOS folder in our directories?
 #----------------------------------------------------------------------------
 
-eos_bin = sp.Popen ( "find /afs/cern.ch/project/eos/installation/ -name 'eos.select' | xargs ls -rt1 | tail -1", shell=True, stdout=sp.PIPE ).communicate()[0].strip()
+use_eos = False
+for input_folder in args.input_folders:
+    if "/eos/" in input_folder:
+        use_eos = True
+        break
+
 
 #----------------------------------------------------------------------------
-# Get list of file paths in EOS
+# Is there a /pnfs/ (dcache) folder in our directories?
 #----------------------------------------------------------------------------
 
-eos_file_paths = []
-for eos_folder in args.input_folders:
-    eos_ls_command = eos_bin + " ls " + eos_folder 
-    eos_files      = sp.Popen ( eos_ls_command, shell=True, stdout=sp.PIPE ).communicate()[0].split()
-    eos_file_paths = eos_file_paths + ["\"root://eoscms/" + eos_folder + "/" + i + "\"," for i in eos_files]
+use_dcache = False
+for input_folder in args.input_folders:
+    if "/pnfs/" in input_folder:
+        use_dcache = True
+        break
+
+#----------------------------------------------------------------------------
+# If we're using EOS, get the latest/greatest EOS binary
+#----------------------------------------------------------------------------
+
+if use_eos:
+    eos_bin = sp.Popen ( "find /afs/cern.ch/project/eos/installation/ -name 'eos.select' | xargs ls -rt1 | tail -1", shell=True, stdout=sp.PIPE ).communicate()[0].strip()
+    ls_command = eos_bin + " ls " 
+else:
+    ls_command = "ls "
+    
+
+#----------------------------------------------------------------------------
+# Get list of file paths 
+#----------------------------------------------------------------------------
+
+file_paths = []
+for folder in args.input_folders:
+    this_ls_command = ls_command + folder 
+    files = sp.Popen ( this_ls_command, shell=True, stdout=sp.PIPE ).communicate()[0].split()
+    if use_eos:
+        file_paths = file_paths + ["\"root://eoscms/" + folder + "/" + i + "\"," for i in files]
+    elif use_dcache:
+        file_paths = file_paths + ["\"dcache:" + folder + "/" + i + "\"," for i in files]
+    else:
+        file_paths = file_paths + ["\"file:" + folder + "/" + i + "\"," for i in files]
 
 #----------------------------------------------------------------------------
 # If the output directory does not exist, create it
@@ -45,7 +76,7 @@ if not os.path.isdir ( args.output_folder ):
 
 output_file_path = args.output_folder + "/inputListAll.txt"
 output_file = open (output_file_path,"w")
-for path in eos_file_paths:
+for path in file_paths:
     output_file.write(path + "\n")
 output_file.close()
 
