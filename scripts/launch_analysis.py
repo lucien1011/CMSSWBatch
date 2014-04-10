@@ -16,12 +16,24 @@ parser = argparse.ArgumentParser(description='Launch an analysis')
 parser.add_argument('-c', metavar='CFG'       , dest='input_python_cfg',action="store", required=True, help='Input CMSSW python config file')
 parser.add_argument('-w', metavar="WORKDIR"   , dest='workdir'         ,action="store", required=True, help='Local working directory')
 parser.add_argument('-n', metavar='NJOBS'     , dest='njobs'           ,action="store", required=True, type=int, help='Number of jobs')
-parser.add_argument('-q', metavar='QUEUE'     , dest='queue'           ,action="store", required=True, help='Batch queue')
 parser.add_argument('-i', metavar='INPUTLIST' , dest='input_list'      ,action="store", required=True, help='Input list of files to run on')
 parser.add_argument('-o', metavar='OUTPUTFILE', dest='output_file'     ,action="store", required=True, help='Name of the output file')
 parser.add_argument('-t', metavar='GLOBALTAG' , dest='global_tag'      ,action="store", required=True, help='GlobalTag to use')
+parser.add_argument('-q', metavar='QUEUE'     , dest='queue'           ,action="store", required=False, help='Batch queue (only needed at CERN)')
 parser.add_argument('-e', metavar='EOSDIR'    , dest='eos_directory'   ,action="store", required=False,help='EOS output directory (optional)')
+parser.add_argument('-s', metavar='SHORT'     , dest='short'           ,action="store", required=False,help='Run on the "SHORT" queue at FNAL (optional)')
 args = parser.parse_args()
+
+#----------------------------------------------------------------------------
+# Are we at fermilab or CERN?
+#----------------------------------------------------------------------------
+
+at_fnal = ("fnal" in os.environ["HOSTNAME"])
+at_cern = ("cern" in os.environ["HOSTNAME"])
+
+if (not args.queue) and at_cern:
+    print "You need to specify a queue if you run at CERN.  Bailing."
+    sys.exit()
 
 #----------------------------------------------------------------------------
 # Should we write this out to EOS?
@@ -30,26 +42,34 @@ args = parser.parse_args()
 
 print "*** Setting up EOS"
 
-write_to_eos = False
 if args.eos_directory:
-    write_to_eos = True
-    get_eos_bin = 'find /afs/cern.ch/project/eos/installation/ -name "eos.select" | xargs ls -rt1 | tail -1'
-    eos_bin = sp.Popen ( get_eos_bin, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
-    print "*** EOS bin =", eos_bin
-    eos_command = eos_bin + " ls " + args.eos_directory
-    print "*** EOS command =", eos_command
-    eos_directory_contents_stderr = sp.Popen ( eos_command, shell=True, stdout=sp.PIPE, stderr=sp.PIPE ).communicate()[1]
+
+    ls_command = ""
+    if at_cern:
+        get_eos_bin = 'find /afs/cern.ch/project/eos/installation/ -name "eos.select" | xargs ls -rt1 | tail -1'
+        eos_bin = sp.Popen ( get_eos_bin, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
+        ls_command    = eos_bin + " ls "    + args.eos_directory
+        mkdir_command = eos_bin + " mkdir -p " + args.eos_directory
+    elif at_fnal:
+        ls_command    = "ls "       + args.eos_directory
+        mkdir_command = "mkdir -p " + args.eos_directory
+    else:
+        print "Don't know how to handle mass storage for this hostname:", os.environ["HOSTNAME"]
+        sys.exit()
+
+    eos_directory_contents_stderr = sp.Popen ( ls_command, shell=True, stdout=sp.PIPE, stderr=sp.PIPE ).communicate()[1]
     eos_directory_exists = False
     if not eos_directory_contents_stderr:
         eos_directory_exists = True
-    print "*** EOS directory exists?", eos_directory_exists
+        
+    print "*** Mass storage directory exists?", eos_directory_exists
     if eos_directory_exists :
-        print "*** Warning. EOS directory you specified already exists:"
+        print "*** Warning. Mass storage directory you specified already exists:"
         print "\t", args.eos_directory
     else:
-        print "*** Making EOS directory you specified:"
+        print "*** Making mass storage directory you specified:"
         print "\t", args.eos_directory
-        os.system ( eos_bin + " mkdir -p " + args.eos_directory )
+        os.system ( mkdir_command )
 
 #----------------------------------------------------------------------------
 # Make work directories
@@ -60,7 +80,8 @@ print "*** Making work directories"
 workdir = args.workdir
 workdir_input_lists = workdir + "/input_lists" 
 workdir_python_cfgs = workdir + "/python_cfgs" 
-workdir_lxbatch_src = workdir + "/lxbatch_src"
+workdir_batch_src   = workdir + "/batch_src"
+workdir_batch_cfg   = workdir + "/batch_cfg"
 workdir_output      = workdir + "/output"
 workdir_log         = workdir + "/log"
 
@@ -73,7 +94,8 @@ if os.path.isdir ( workdir ):
 os.system ("mkdir -p " + workdir )
 os.system ("mkdir -p " + workdir_input_lists )
 os.system ("mkdir -p " + workdir_python_cfgs )
-os.system ("mkdir -p " + workdir_lxbatch_src )
+os.system ("mkdir -p " + workdir_batch_src )
+os.system ("mkdir -p " + workdir_batch_cfg )
 os.system ("mkdir -p " + workdir_output )
 os.system ("mkdir -p " + workdir_log )
     
@@ -144,24 +166,57 @@ for ijob in range (0, njobs_updated):
 
 print "*** Making batch src files"
 
-scratch_dir = "/tmp/" + os.environ["USER"]
-
 src_file_paths = []
 for ijob in range (0, njobs_updated):
-    src_file_path = workdir_lxbatch_src + "/submit_" + str ( ijob ) + ".sh"
+    src_file_path = workdir_batch_src + "/submit_" + str ( ijob ) + ".sh"
     src_file = open (src_file_path,"w")
     src_file.write("#!/bin/bash\n")
     src_file.write("cd " + os.environ["CMSSW_BASE"] + "\n")
     src_file.write("eval `scramv1 runtime -sh`\n")
-    src_file.write("cd " + workdir_output + "\n")
-    if write_to_eos:
+    if at_cern:
+        src_file.write("cd " + workdir_output + "\n")
+        scratch_dir = "/tmp/" + os.environ["USER"]
+        if not os.path.isdir ( scratch_dir ):
+            os.system ( "mkdir " + scratch_dir )
         src_file.write("cd " + scratch_dir + "\n")
-    src_file.write("cmsRun " + cfg_file_paths[ijob] + "\n")
-    if write_to_eos:
+        src_file.write("cmsRun " + cfg_file_paths[ijob] + "\n")
         src_file.write("xrdcp " + output_files[ijob] + " root://eoscms/" + args.eos_directory.strip() + "/" + output_files[ijob] + "\n")
         src_file.write("rm " + output_files[ijob])
+    if at_fnal:
+        scratch_dir = "$_CONDOR_SCRATCH_DIR"
+        src_file.write("cd " + scratch_dir + "\n")
+        src_file.write("cmsRun " + os.path.basename(cfg_file_paths[ijob]) + "\n")
+        src_file.write("mv " + output_files[ijob] + " " + args.eos_directory.strip() + "/" + output_files[ijob] + "\n")
+        os.system("chmod u+x " + src_file_path + "\n")
+
     src_file.close()
     src_file_paths.append ( src_file_path ) 
+
+#----------------------------------------------------------------------------
+# If at FNAL, you need a batch cfg file
+# http://www.uscms.org/uscms_at_work/computing/setup/batch_systems.shtml
+#----------------------------------------------------------------------------
+
+print "*** Making batch cfg files (if you're at FNAL)"
+
+batch_cfg_file_paths = []
+if at_fnal:
+    for ijob in range (0, njobs_updated):
+        cfg_file_path = workdir_batch_cfg + "/config_" + str ( ijob ) + ".cfg"
+        cfg_file = open (cfg_file_path,"w")
+        cfg_file.write("universe = vanilla\n")
+        cfg_file.write("Executable = " + src_file_paths[ijob] + "\n")
+        cfg_file.write("Should_Transfer_Files = YES\n")
+        cfg_file.write("WhenToTransferOutput = ON_EXIT\n")
+        cfg_file.write("Transfer_Input_Files = " + cfg_file_paths[ijob] + "\n")
+        cfg_file.write("Output = job_"+str(ijob)+".stdout\n")
+        cfg_file.write("Error = job_"+str(ijob)+".stderr\n")
+        cfg_file.write("Log = job_"+str(ijob)+".log\n")
+        cfg_file.write("notify_user = "+os.environ["USER"]+"@FNAL.GOV\n")
+        cfg_file.write("Queue 1\n")
+        if args.short:
+            cfg_file.write("+LENGTH='SHORT'\n")
+        batch_cfg_file_paths.append ( cfg_file_path ) 
 
 #----------------------------------------------------------------------------
 # Make launch path
@@ -170,8 +225,17 @@ for ijob in range (0, njobs_updated):
 print "*** Writing submit commands"
 
 launch_file = open("launch.sh","w")
+
+if at_fnal:
+    launch_file.write("cd " + workdir_log + "\n")
+
 for ijob in range (0, njobs_updated):
-    launch_file.write("bsub -q " + args.queue + " -o " + workdir_log + "/job_" + str(ijob) + ".log source " + src_file_paths[ijob] + "\n")
+    if at_cern:
+        launch_file.write("bsub -q " + args.queue + " -o " + workdir_log + "/job_" + str(ijob) + ".log source " + src_file_paths[ijob] + "\n")
+    if at_fnal:
+        launch_file.write("condor_submit " + batch_cfg_file_paths[ijob] + "\n")
+if at_fnal:
+    launch_file.write("cd -\n")
 launch_file.close()
 
 #----------------------------------------------------------------------------

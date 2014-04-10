@@ -24,14 +24,22 @@ parser.add_argument('-e', metavar='EOSDIR'    , dest='eos_directory'   ,action="
 args = parser.parse_args()
 
 #----------------------------------------------------------------------------
+# Are we at fermilab or CERN?
+#----------------------------------------------------------------------------
+
+at_fnal = ("fnal" in os.environ["HOSTNAME"])
+at_cern = ("cern" in os.environ["HOSTNAME"])
+
+#----------------------------------------------------------------------------
 # Did we write this out to EOS?
 #----------------------------------------------------------------------------
 
 write_to_eos = False
 if args.eos_directory:
     write_to_eos = True
-    get_eos_bin = 'find /afs/cern.ch/project/eos/installation/ -name "eos.select" | xargs ls -rt1 | tail -1'
-    eos_bin = sp.Popen ( get_eos_bin, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
+    if at_cern:
+        get_eos_bin = 'find /afs/cern.ch/project/eos/installation/ -name "eos.select" | xargs ls -rt1 | tail -1'
+        eos_bin = sp.Popen ( get_eos_bin, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
 
 #----------------------------------------------------------------------------
 # Lists of jobs
@@ -46,7 +54,7 @@ bad_jobs = []
 
 print "*** Getting job numbers from src files:", 
 
-src_folder = args.workdir + "/lxbatch_src/"
+src_folder = args.workdir + "/batch_src/"
 src_files = sp.Popen ( "ls " + src_folder, shell=True, stdout=sp.PIPE ).communicate()[0].split()
 for src_file in src_files:
     job_number = int(src_file.split("submit_")[1].split(".sh")[0])
@@ -90,13 +98,17 @@ for job_number in all_jobs:
     if job_number in bad_jobs: continue
     log_file_path = log_file_folder + "/job_%d.log" % job_number
     if not os.path.isfile ( log_file_path ):
-        print "\tMissing log file for job:", job
+        print "\tMissing log file for job:", job_number
+        print "\tI looked here:", log_file_path
         bad_jobs.append ( job_number )
 
 print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs), "have log files"
 
 if write_to_eos:
-    eos_files = sp.Popen ( eos_bin + " ls " + args.eos_directory, shell=True, stdout=sp.PIPE ).communicate()[0].split()
+    if at_cern:
+        eos_files = sp.Popen ( eos_bin + " ls " + args.eos_directory, shell=True, stdout=sp.PIPE ).communicate()[0].split()
+    if at_fnal:
+        eos_files = sp.Popen ( "ls " + args.eos_directory, shell=True, stdout=sp.PIPE ).communicate()[0].split()
     for job_number in all_jobs:
         if job_number in bad_jobs: continue
         file_name = args.output_file + "_" + str(job_number) + ".root"
@@ -122,18 +134,30 @@ else:
 
 print "*** Extra check for jobs with errors in their logs"
 
-bad_strings = ["error", "exit code"]
+bad_strings = ["exit code"]
 
-grep_command = "ls " + log_file_folder + "/*.log | xargs egrep -i '"
+if at_cern:
+    grep_command = "ls " + log_file_folder + "/*.log | xargs egrep -i '"
+if at_fnal:
+    grep_command = "ls " + log_file_folder + "/*.stderr | xargs egrep -i '"
+
 for bad_string in bad_strings:
     grep_command = grep_command + bad_string + "|"
 grep_command = grep_command[:-1]+"'"
+
 grep_output_entries = sp.Popen ( grep_command, shell=True,stdout=sp.PIPE).communicate()[0].split("\n")
+n_entries = len ( grep_output_entries ) 
 for entry in grep_output_entries:
     if not entry.strip(): continue
     log_file = os.path.basename(entry.split(":")[0])
-    job_number = int(log_file.split("_")[1].split(".log")[0])
-    message  = entry.split(log_file + ":")[1]
+    if at_cern:
+        job_number = int(log_file.split("_")[1].split(".log")[0])
+    if at_fnal:
+        job_number = int(log_file.split("_")[1].split(".stderr")[0])
+    if n_entries > 1:
+        message  = entry.split(log_file + ":")[1]
+    else:
+        message = entry.strip()
     print "\tJob", job_number, " has bad log message:", message
     if job_number not in bad_jobs:
         bad_jobs.append ( job_number )
@@ -146,28 +170,58 @@ print "*** Writing submit commands"
 
 bad_jobs.sort()
 
-workdir_lxbatch_src = args.workdir + "/lxbatch_src"
+workdir_lxbatch_cfg = args.workdir + "/batch_cfg"
+workdir_lxbatch_src = args.workdir + "/batch_src"
 workdir_log         = args.workdir + "/log"
 launch_file = open("launch.sh","w")
 
 for job_number in bad_jobs:
+    cfg_file_path = workdir_lxbatch_cfg + "/config_" + str ( job_number ) + ".cfg"
     src_file_path = workdir_lxbatch_src + "/submit_" + str ( job_number ) + ".sh"
     old_log_file_path = log_file_folder + "/job_%d.log" % job_number
     new_log_file_path = log_file_folder + "/job_%d.log.resubmit" % job_number
     log_command = "mv " + old_log_file_path + " " + new_log_file_path
-    if write_to_eos:
-        eos_file = args.output_file + "_" + str(job_number) + ".root"
-        if eos_file in eos_files:
-            output_command = eos_bin + " rm " + args.eos_directory + "/" + eos_file
+    eos_file = args.output_file + "_" + str(job_number) + ".root"
+    if at_cern:
+        if write_to_eos:
+            if eos_file in eos_files:
+                output_command = eos_bin + " rm " + args.eos_directory + "/" + eos_file
+            else:
+                output_command = ""
         else:
-            output_command = ""
-    else:
-        output_command = "rm " + args.workdir + "/output/" + args.output_file + "_" + str(job_number) + ".root"
-    if os.path.isfile ( old_log_file_path ):
-        launch_file.write(log_command + "\n")
-    if output_command:
-        launch_file.write(output_command + "\n")
-    launch_file.write("bsub -q " + args.queue + " -o " + workdir_log + "/job_" + str(job_number) + ".log source " + src_file_path + "\n")
+            output_command = "rm " + args.workdir + "/output/" + args.output_file + "_" + str(job_number) + ".root"
+        if os.path.isfile ( old_log_file_path ):
+            launch_file.write(log_command + "\n")
+        if output_command:
+            launch_file.write(output_command + "\n")
+        launch_command = "bsub -q " + args.queue + " -o " + workdir_log + "/job_" + str(job_number) + ".log source " + src_file_path + "\n"
+        launch_file.write(launch_command)
+
+    if at_fnal:
+        old_stderr_file_path = log_file_folder + "/job_%d.stderr" % job_number
+        old_stdout_file_path = log_file_folder + "/job_%d.stdout" % job_number
+        new_stderr_file_path = log_file_folder + "/job_%d.stderr.resubmit" % job_number
+        new_stdout_file_path = log_file_folder + "/job_%d.stdout.resubmit" % job_number
+        stderr_command = "mv " + old_stderr_file_path + " " + new_stderr_file_path
+        stdout_command = "mv " + old_stdout_file_path + " " + new_stdout_file_path
+        if write_to_eos:
+            if eos_file in eos_files:
+                output_command = "rm " + args.eos_directory + "/" + eos_file
+            else:
+                output_command = ""
+        else:
+            output_command = "rm " + args.workdir + "/output/" + args.output_file + "_" + str(job_number) + ".root"
+        if os.path.isfile ( old_stderr_file_path ):
+            launch_file.write( stderr_command + "\n") 
+        if os.path.isfile ( old_stdout_file_path ):
+            launch_file.write( stdout_command + "\n" ) 
+        if os.path.isfile ( old_log_file_path ):
+            launch_file.write(log_command + "\n")
+        if output_command:
+            launch_file.write(output_command + "\n")
+        launch_command = "condor_submit " + cfg_file_path
+        launch_file.write(launch_command+"\n")
+
 launch_file.close()
 
 
