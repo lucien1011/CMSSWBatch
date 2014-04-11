@@ -77,6 +77,8 @@ for i,file in enumerate(files):
     os.system ( tmpcp_command ) 
     print "\tCopying from CERN scratch to CERN EOS..."
     os.system ( eoscp_command ) 
+    print "\tRemoving from CERN scratch..."
+    os.system ( "rm " + cern_tmp_path )
     print "\tDone!"
     
 print "All done!"
