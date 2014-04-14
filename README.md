@@ -17,3 +17,4 @@ Tags:
   * V00-03-00: Added functionality for FNAL
   * V00-03-01: Added script to copy from FNAL EOS to CERN EOS
   * V00-03-02: Bug fix: remove file from CERN scratch
+  * V00-03-00: Added some 62X QCD MC submission commands
