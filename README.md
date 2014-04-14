@@ -15,3 +15,5 @@ Tags:
   * V00-01-00: Added some saved commands.  Added EOS functionality.
   * V00-02-00: Added some verbosity for debugging. Added check output script.  Bug fixes.
   * V00-03-00: Added functionality for FNAL
+  * V00-03-01: Added script to copy from FNAL EOS to CERN EOS
+  * V00-03-02: Bug fix: remove file from CERN scratch
