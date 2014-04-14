@@ -1,5 +1,5 @@
 python scripts/launch_analysis.py \
--c ../HcalReco/test/hcalNoise_fromGEN-SIM_cfg.py \
+-c ../HcalReco/test/hcalNoise_fromGEN-SIM_62X_cfg.py \
 -w $PWD/work/HcalNoise_QCD1800_MC \
 -n 500 \
 -q 1nh \
