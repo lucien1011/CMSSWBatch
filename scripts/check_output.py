@@ -175,6 +175,9 @@ workdir_lxbatch_src = args.workdir + "/batch_src"
 workdir_log         = args.workdir + "/log"
 launch_file = open("launch.sh","w")
 
+if at_fnal:
+    launch_file.write("cd " + log_file_folder + "\n")
+
 for job_number in bad_jobs:
     cfg_file_path = workdir_lxbatch_cfg + "/config_" + str ( job_number ) + ".cfg"
     src_file_path = workdir_lxbatch_src + "/submit_" + str ( job_number ) + ".sh"
@@ -221,6 +224,9 @@ for job_number in bad_jobs:
             launch_file.write(output_command + "\n")
         launch_command = "condor_submit " + cfg_file_path
         launch_file.write(launch_command+"\n")
+
+if at_fnal:
+    launch_file.write("cd -\n")
 
 launch_file.close()
 
