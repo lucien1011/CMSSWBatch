@@ -80,13 +80,11 @@ if args.eos_directory:
 print "*** Making work directories"
 
 workdir = args.workdir
-workdir_input_lists    = workdir + "/input_lists" 
 workdir_python_cfgs    = workdir + "/python_cfgs" 
 workdir_batch_src      = workdir + "/batch_src"
 workdir_batch_cfg      = workdir + "/batch_cfg"
 workdir_output         = workdir + "/output"
 workdir_log            = workdir + "/log"
-workdir_pu_input_lists = workdir + "/pu_input_lists"
 
 if os.path.isdir ( workdir ):
     print "working directory you specified already exists:"
@@ -95,8 +93,6 @@ if os.path.isdir ( workdir ):
     sys.exit()
 
 os.system ("mkdir -p " + workdir )
-os.system ("mkdir -p " + workdir_input_lists )
-os.system ("mkdir -p " + workdir_pu_input_lists )
 os.system ("mkdir -p " + workdir_python_cfgs )
 os.system ("mkdir -p " + workdir_batch_src )
 os.system ("mkdir -p " + workdir_batch_cfg )
@@ -116,6 +112,9 @@ if not os.path.isfile ( args.input_list ):
     sys.exit()
 
 input_list = open ( args.input_list, "r" ) 
+cache_path = args.input_list.replace(".txt",".cache.txt")
+if not os.path.isfile ( cache_path ): 
+    os.system ( "touch " + cache_path ) 
 d_inputFile_nevents = {}
 input_files = []
 total_nevents = int(0)
@@ -123,8 +122,19 @@ for iline, line in enumerate(input_list):
     line = line.strip()
     if line == "": continue
     line = line.replace(",","")
-    command = "edmFileUtil " + line
-    nevents = int(sp.Popen ( command, shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")[1].split(",")[2].split("event")[0].strip())
+
+    command1 = "cat " + cache_path + " | grep " + line
+    command1_output = sp.Popen ( command1, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
+    no_cache = ( command1_output == "" )
+
+    if no_cache:
+        command2 = "edmFileUtil " + line
+        nevents = int(sp.Popen ( command2, shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")[1].split(",")[2].split("event")[0].strip())
+        command3 = "echo " + line + " " + str(nevents) + " >> " + cache_path
+        os.system ( command3 ) 
+    else:
+        nevents = int(command1_output.split()[1].strip())
+
     d_inputFile_nevents[line] = nevents
     input_files.append ( line )
     total_nevents += nevents
@@ -166,8 +176,8 @@ for ijob in range(0,njobs_updated):
         events_to_process = nevents_in_last_job
 
     nevents_in_previous_files = 0
-    start_file = "BLAH"
-    stop_file = "BLAH"
+    start_file = -1
+    stop_file = -1
     for i_input_file, input_file in enumerate(input_files):
         nevents_in_this_file = d_inputFile_nevents[input_file]
         if input_file == input_files[-1]:
@@ -175,7 +185,7 @@ for ijob in range(0,njobs_updated):
         else:
             nevents_in_next_file = d_inputFile_nevents[input_files[i_input_file+1]]
 
-        if job_min_event > nevents_in_previous_files and job_min_event < ( nevents_in_previous_files + nevents_in_this_file ):
+        if job_min_event >= nevents_in_previous_files and job_min_event < ( nevents_in_previous_files + nevents_in_this_file ):
             start_file = i_input_file
         if job_max_event <= nevents_in_previous_files + nevents_in_this_file:
             stop_file = i_input_file
@@ -213,12 +223,24 @@ if ( args.pu_input_list):
     ijob = 0
     pu_files_to_process_data = ""
     pu_input_list = open ( args.pu_input_list, "r" ) 
+    cache_path = args.pu_input_list.replace(".txt",".cache.txt")
+    if not os.path.isfile ( cache_path ):
+        os.system ( "touch " + cache_path ) 
     for iline, line in enumerate(pu_input_list):
         line = line.strip()
         if line == "": continue
         line = line.replace(",","")
-        command = "edmFileUtil " + line
-        n_pu_events = int(sp.Popen ( command, shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")[1].split(",")[2].split("event")[0].strip())
+        command1 = "cat " + cache_path + " | grep " + line
+        command1_output = sp.Popen ( command1, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
+        no_cache = ( command1_output == "" )
+
+        if no_cache:
+            command2 = "edmFileUtil " + line
+            n_pu_events = int(sp.Popen ( command2, shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")[1].split(",")[2].split("event")[0].strip())
+            command3 = "echo " + line + " " + str(n_pu_events) + " >> " + cache_path
+            os.system ( command3 ) 
+        else:
+            n_pu_events = int(command1_output.split()[1].strip())
         total_n_pu_events += n_pu_events
         print "\t", iline, line, int(n_pu_events), int(total_n_pu_events)
         
