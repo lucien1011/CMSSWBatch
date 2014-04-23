@@ -17,7 +17,6 @@ parser.add_argument('-c', metavar='CFG'       , dest='input_python_cfg',action="
 parser.add_argument('-w', metavar="WORKDIR"   , dest='workdir'         ,action="store", required=True, help='Local working directory')
 parser.add_argument('-n', metavar='NJOBS'     , dest='njobs'           ,action="store", required=True, type=int, help='Number of jobs')
 parser.add_argument('-q', metavar='QUEUE'     , dest='queue'           ,action="store", required=True, help='Batch queue')
-parser.add_argument('-i', metavar='INPUTLIST' , dest='input_list'      ,action="store", required=True, help='Input list of files to run on')
 parser.add_argument('-o', metavar='OUTPUTFILE', dest='output_file'     ,action="store", required=True, help='Name of the output file')
 parser.add_argument('-t', metavar='GLOBALTAG' , dest='global_tag'      ,action="store", required=True, help='GlobalTag to use')
 parser.add_argument('-e', metavar='EOSDIR'    , dest='eos_directory'   ,action="store", required=False,help='EOS output directory (optional)')
@@ -47,6 +46,8 @@ if args.eos_directory:
 
 all_jobs = []
 bad_jobs = []
+running_jobs = []
+
 
 #----------------------------------------------------------------------------
 # Get job numbers from source files
@@ -63,46 +64,56 @@ all_jobs.sort()
 print "Found", len (all_jobs), "job(s)"
 
 #----------------------------------------------------------------------------
+# Get list of jobs running
+#----------------------------------------------------------------------------
+
+print "*** Getting job numbers that are still running:", 
+
+if at_fnal:
+    lines = sp.Popen ("condor_q -submitter " + os.environ["USER"], shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")
+    for line in lines:
+        line = line.strip()
+        if line == "": continue
+        if "Submitter" in line: continue
+        if "SUBMITTED" in line: continue
+        if "suspended" in line: continue
+        job_number = int(line.split()[-1].split("submit_")[1].split(".sh")[0])
+        running_jobs.append ( job_number ) 
+
+print "Found", len(all_jobs) - len (running_jobs), "job(s) done running"
+
+#----------------------------------------------------------------------------
 # Make sure that the following are all there for each job
-# - input list
 # - log file
 # - output (on local disk or on EOS)
 # - python cfg 
 #----------------------------------------------------------------------------
 
-print "*** Checking", len (all_jobs), "job(s)"
-
-input_list_folder = args.workdir + "/input_lists/"
-for job_number in all_jobs:
-    if job_number in bad_jobs: continue
-    input_list_path = input_list_folder + "/inputList_%d.txt" % job_number
-    if not os.path.isfile ( input_list_path ):
-        print "\tMissing input list for job:", job
-        bad_jobs.append ( job_number )
-
-print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs), "have input list files"
+print "*** Checking", len (all_jobs) - len(running_jobs), "job(s)"
 
 cfg_file_folder = args.workdir + "/python_cfgs/"
 for job_number in all_jobs:
     if job_number in bad_jobs: continue
+    if job_number in running_jobs: continue
     cfg_file_name = os.path.basename(args.input_python_cfg).replace("_cfg.py","_" + str(job_number) + "_cfg.py")
     cfg_file_path = cfg_file_folder + "/" + cfg_file_name
     if not os.path.isfile ( cfg_file_path ):
         print "\tMissing python cfg file for job:", job
         bad_jobs.append ( job_number )
 
-print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs), "have python cfg files"
+print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs) - len(running_jobs), "have python cfg files"
 
 log_file_folder = args.workdir + "/log/"
 for job_number in all_jobs:
     if job_number in bad_jobs: continue
+    if job_number in running_jobs: continue
     log_file_path = log_file_folder + "/job_%d.log" % job_number
     if not os.path.isfile ( log_file_path ):
         print "\tMissing log file for job:", job_number
         print "\tI looked here:", log_file_path
         bad_jobs.append ( job_number )
 
-print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs), "have log files"
+print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs) - len(running_jobs), "have log files"
 
 if write_to_eos:
     if at_cern:
@@ -111,20 +122,22 @@ if write_to_eos:
         eos_files = sp.Popen ( "ls " + args.eos_directory, shell=True, stdout=sp.PIPE ).communicate()[0].split()
     for job_number in all_jobs:
         if job_number in bad_jobs: continue
+        if job_number in running_jobs: continue
         file_name = args.output_file + "_" + str(job_number) + ".root"
         if file_name not in eos_files:
             print "\tMissing root file on EOS for job:", job_number, ":", file_name
             bad_jobs.append ( job_number )
-    print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs), "have root files on EOS"
+    print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs) - len(running_jobs), "have root files on EOS"
 else:
     local_files = sp.Popen ( "ls " + args.workdir + "/output/", shell=True, stdout=sp.PIPE ).communicate()[0].split()
     for job_number in all_jobs:
         if job_number in bad_jobs: continue
+        if job_number in running_jobs: continue
         file_name = args.output_file + "_" + str(job_number) + ".root"
         if file_name not in local_files:
             print "\tMissing root file on local disk for job:", job_number, ":", file_name
             bad_jobs.append ( job_number )
-    print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs), "have root files on local disk"
+    print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs) - len(running_jobs), "have root files on local disk"
     
 #----------------------------------------------------------------------------
 # For log files, look for the following strings, which suggest job failure
@@ -134,7 +147,7 @@ else:
 
 print "*** Extra check for jobs with errors in their logs"
 
-bad_strings = ["exit code"]
+bad_strings = ["exit code", "abort"]
 
 if at_cern:
     grep_command = "ls " + log_file_folder + "/*.log | xargs egrep -i '"
@@ -238,5 +251,7 @@ launch_file.close()
 if bad_jobs:
     print "Done!  Relaunch",len(bad_jobs),"jobs by doing the following:"
     print "\t", "source launch.sh"
+elif running_jobs:
+    print "Done!  There are", len (running_jobs), "jobs still running."
 else:
     print "Done!  All jobs successful!"
