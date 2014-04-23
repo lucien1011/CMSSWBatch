@@ -17,6 +17,13 @@ parser.add_argument('-o', metavar="OUTPUT", dest='output_folder',action="store" 
 args = parser.parse_args()
 
 #----------------------------------------------------------------------------
+# Are we at FNAL or CERN?
+#----------------------------------------------------------------------------
+
+at_fnal = ("fnal.gov" in os.environ["HOSTNAME"])
+at_cern = ("cern.ch"  in os.environ["HOSTNAME"])
+
+#----------------------------------------------------------------------------
 # Is there an EOS folder in our directories?
 #----------------------------------------------------------------------------
 
@@ -25,7 +32,6 @@ for input_folder in args.input_folders:
     if "/eos/" in input_folder:
         use_eos = True
         break
-
 
 #----------------------------------------------------------------------------
 # Is there a /pnfs/ (dcache) folder in our directories?
@@ -41,12 +47,11 @@ for input_folder in args.input_folders:
 # If we're using EOS, get the latest/greatest EOS binary
 #----------------------------------------------------------------------------
 
-if use_eos:
+if use_eos and at_cern:
     eos_bin = sp.Popen ( "find /afs/cern.ch/project/eos/installation/ -name 'eos.select' | xargs ls -rt1 | tail -1", shell=True, stdout=sp.PIPE ).communicate()[0].strip()
     ls_command = eos_bin + " ls " 
 else:
     ls_command = "ls "
-    
 
 #----------------------------------------------------------------------------
 # Get list of file paths 
@@ -56,7 +61,7 @@ file_paths = []
 for folder in args.input_folders:
     this_ls_command = ls_command + folder 
     files = sp.Popen ( this_ls_command, shell=True, stdout=sp.PIPE ).communicate()[0].split()
-    if use_eos:
+    if use_eos and at_cern:
         file_paths = file_paths + ["\"root://eoscms/" + folder + "/" + i + "\"," for i in files]
     elif use_dcache:
         file_paths = file_paths + ["\"dcache:" + folder + "/" + i + "\"," for i in files]
