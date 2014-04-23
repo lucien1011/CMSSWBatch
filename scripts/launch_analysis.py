@@ -26,6 +26,8 @@ parser.add_argument('-s', metavar='SHORT'      , dest='short'           ,action=
 
 args = parser.parse_args()
 
+verbose = False
+
 #----------------------------------------------------------------------------
 # Are we at fermilab or CERN?
 #----------------------------------------------------------------------------
@@ -168,6 +170,10 @@ for ijob in range(0,njobs_updated):
     job_min_event = 1 + nevents_per_job * ijob
     job_max_event = nevents_per_job * (ijob + 1)
     
+    if verbose:
+        print "\t", "Job " + str(ijob)+ ":"
+        print "\t\t", "Events", job_min_event, "-", job_max_event
+
     total_events_to_skip = job_min_event - 1
     events_to_process = nevents_per_job
 
@@ -176,36 +182,73 @@ for ijob in range(0,njobs_updated):
         events_to_process = nevents_in_last_job
 
     nevents_in_previous_files = 0
+    nevents_before_start_file = 0
+    nevents_after_start_file = 0
+    nevents_before_stop_file = 0
+    nevents_after_stop_file = 0
     start_file = -1
     stop_file = -1
+    file_before_start_file = -1
+    file_before_stop_file = -1
     for i_input_file, input_file in enumerate(input_files):
         nevents_in_this_file = d_inputFile_nevents[input_file]
-        if input_file == input_files[-1]:
-            nevents_in_next_file = 0
-        else:
-            nevents_in_next_file = d_inputFile_nevents[input_files[i_input_file+1]]
-
-        if job_min_event >= nevents_in_previous_files and job_min_event < ( nevents_in_previous_files + nevents_in_this_file ):
+        if job_min_event > nevents_in_previous_files and job_min_event <= ( nevents_in_previous_files + nevents_in_this_file ):
             start_file = i_input_file
-        if job_max_event <= nevents_in_previous_files + nevents_in_this_file:
+            file_before_start_file = start_file - 1
+            if start_file == 0:
+                file_before_start_file = 0
+            nevents_before_start_file = nevents_in_previous_files
+            nevents_after_start_file = nevents_in_previous_files + nevents_in_this_file
+        if job_max_event > nevents_in_previous_files and job_max_event <= ( nevents_in_previous_files + nevents_in_this_file ):
             stop_file = i_input_file
+            file_before_stop_file = stop_file - 1
+            if stop_file == 0:
+                file_before_stop_file = 0
+            nevents_before_stop_file = nevents_in_previous_files
+            nevents_after_stop_file = nevents_in_previous_files + nevents_in_this_file
             break
 
         nevents_in_previous_files += nevents_in_this_file
 
-    nevents_in_previous_files = 0
-    for i_input_file in range(0, start_file):
-        nevents_in_previous_files += d_inputFile_nevents[input_files[i_input_file]]
+    first_event_in_file = nevents_before_start_file + 1
+    events_to_skip = job_min_event - first_event_in_file
+    n_files_to_process = stop_file - start_file + 1
     
-    files_to_process = input_files[start_file:stop_file+1]
+    if verbose:
+        print "\t\t", "Files", 0, "-", file_before_start_file, "have", nevents_before_start_file, "events < ", job_min_event
+        print "\t\t", "Files", 0, "-", start_file, "have", nevents_after_start_file, "events >=", job_min_event, "so start on file", start_file
+        print "\t\t", "The first event in file", start_file, "is", first_event_in_file
+        print "\t\t", "You want to start on event", job_min_event
+        print "\t\t", "So skip", events_to_skip, "events"
+        print "\t\t", "Process", events_to_process, "events to end on event", job_max_event
+        print "\t\t", "Files", 0, "-", file_before_stop_file, "have", nevents_before_stop_file, "events < ", job_max_event
+        print "\t\t", "Files", 0, "-", stop_file - 0, "have", nevents_after_stop_file, "events >=", job_max_event, "so stop on file", stop_file
+        print "\t\t", "That is a total of", n_files_to_process, "files to process"
+        print "\t\t", "Files are:"
+
+    i_files_to_process = range(start_file, stop_file + 1)
+    
     files_to_process_data = ""
-    for input_file in files_to_process:
+    for i_file_to_process in i_files_to_process:
+        input_file = input_files[i_file_to_process]
+        if verbose:
+            print "\t\t\t", str(i_file_to_process) + str(":"), input_file
         files_to_process_data += input_file + ",\n"
     files_to_process_data = files_to_process_data[:-2]
     files_to_process_data = files_to_process_data.replace("/","\/")
-
-    events_to_skip = total_events_to_skip - nevents_in_previous_files
     
+    if events_to_skip < 0:
+        print "ERROR: nonsensical events to skip:", events_to_skip
+        sys.exit()
+
+    if events_to_process < 0:
+        print "ERROR: nonsensical events to process:", events_to_process
+        sys.exit()
+
+    if len ( i_files_to_process ) <= 0:
+        print "ERROR: nonsensical files to process", i_files_to_process
+        sys.exit()
+        
     l_events_to_skip.append    ( events_to_skip    )
     l_events_to_process.append ( events_to_process ) 
     l_files_to_process.append  ( files_to_process_data  )
@@ -364,11 +407,19 @@ launch_file = open("launch.sh","w")
 if at_fnal:
     launch_file.write("cd " + workdir_log + "\n")
 
-for ijob in range (0, njobs_updated):
+
+for ijob in range (njobs_updated - 1, njobs_updated):
     if at_cern:
         launch_file.write("bsub -q " + args.queue + " -o " + workdir_log + "/job_" + str(ijob) + ".log source " + src_file_paths[ijob] + "\n")
     if at_fnal:
         launch_file.write("condor_submit " + batch_cfg_file_paths[ijob] + "\n")
+
+for ijob in range (0, njobs_updated-1):
+    if at_cern:
+        launch_file.write("bsub -q " + args.queue + " -o " + workdir_log + "/job_" + str(ijob) + ".log source " + src_file_paths[ijob] + "\n")
+    if at_fnal:
+        launch_file.write("condor_submit " + batch_cfg_file_paths[ijob] + "\n")
+
 if at_fnal:
     launch_file.write("cd -\n")
 launch_file.close()
