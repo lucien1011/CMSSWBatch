@@ -80,6 +80,15 @@ if at_fnal:
         job_number = int(line.split()[-1].split("submit_")[1].split(".sh")[0])
         running_jobs.append ( job_number ) 
 
+if at_cern:
+    lines = sp.Popen ("bjobs", shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")
+    for line in lines:
+        line = line.strip()
+        if line == "": continue
+        if "JOBID" in line: continue
+        job_number = int (line.split()[6].split("_")[1].split(".sh")[0])
+        running_jobs.append ( job_number ) 
+
 print "Found", len(all_jobs) - len (running_jobs), "job(s) done running"
 
 #----------------------------------------------------------------------------
@@ -95,10 +104,10 @@ cfg_file_folder = args.workdir + "/python_cfgs/"
 for job_number in all_jobs:
     if job_number in bad_jobs: continue
     if job_number in running_jobs: continue
-    cfg_file_name = os.path.basename(args.input_python_cfg).replace("_cfg.py","_" + str(job_number) + "_cfg.py")
+    cfg_file_name = os.path.basename(args.input_python_cfg).replace(".py","_" + str(job_number) + ".py")
     cfg_file_path = cfg_file_folder + "/" + cfg_file_name
     if not os.path.isfile ( cfg_file_path ):
-        print "\tMissing python cfg file for job:", job
+        print "\tMissing python cfg file for job:", job_number
         bad_jobs.append ( job_number )
 
 print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs) - len(running_jobs), "have python cfg files"

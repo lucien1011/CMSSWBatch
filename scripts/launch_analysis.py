@@ -16,13 +16,14 @@ parser = argparse.ArgumentParser(description='Launch an analysis')
 parser.add_argument('-c', metavar='CFG'        , dest='input_python_cfg',action="store", required=True , help='Input CMSSW python config file')
 parser.add_argument('-w', metavar="WORKDIR"    , dest='workdir'         ,action="store", required=True , help='Local working directory')
 parser.add_argument('-n', metavar='NJOBS'      , dest='njobs'           ,action="store", required=True , type=int, help='Number of jobs')
-parser.add_argument('-i', metavar='INPUTLIST'  , dest='input_list'      ,action="store", required=True , help='Input list of files to run on')
+parser.add_argument('-i', metavar='INPUTLIST'  , dest='input_list'      ,action="store", required=False, help='Input list of files to run on')
 parser.add_argument('-p', metavar='PUINPUTLIST', dest='pu_input_list'   ,action="store", required=False, help='Input list of files for pileup')
 parser.add_argument('-o', metavar='OUTPUTFILE' , dest='output_file'     ,action="store", required=True , help='Name of the output file')
 parser.add_argument('-t', metavar='GLOBALTAG'  , dest='global_tag'      ,action="store", required=True , help='GlobalTag to use')
 parser.add_argument('-q', metavar='QUEUE'      , dest='queue'           ,action="store", required=False, help='Batch queue (only needed at CERN)')
 parser.add_argument('-e', metavar='EOSDIR'     , dest='eos_directory'   ,action="store", required=False, help='EOS output directory (optional)')
 parser.add_argument('-s', metavar='SHORT'      , dest='short'           ,action="store", required=False, help='Run on the "SHORT" queue at FNAL (optional)')
+parser.add_argument('-ej',metavar="EVENTS_JOB" , dest="events_per_job"  ,action="store", required=False, help='If generating samples, how many events per job? (optional)') 
 
 args = parser.parse_args()
 
@@ -105,200 +106,206 @@ os.system ("mkdir -p " + workdir_log )
 # Get number of events in each file
 #----------------------------------------------------------------------------
 
-print "*** Counting number of events in each input file"
+if ( args.input_list ) :
 
-if not os.path.isfile ( args.input_list ):
-    print "Input list you specified does not exist:"
-    print "\t", args.input_list 
-    print "Specify an existing file to continue"
-    sys.exit()
-
-input_list = open ( args.input_list, "r" ) 
-cache_path = args.input_list.replace(".txt",".cache.txt")
-if not os.path.isfile ( cache_path ): 
-    os.system ( "touch " + cache_path ) 
-d_inputFile_nevents = {}
-input_files = []
-total_nevents = int(0)
-for iline, line in enumerate(input_list):
-    line = line.strip()
-    if line == "": continue
-    line = line.replace(",","")
-
-    command1 = "cat " + cache_path + " | grep " + line
-    command1_output = sp.Popen ( command1, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
-    no_cache = ( command1_output == "" )
-
-    if no_cache:
-        command2 = "edmFileUtil " + line
-        nevents = int(sp.Popen ( command2, shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")[1].split(",")[2].split("event")[0].strip())
-        command3 = "echo " + line + " " + str(nevents) + " >> " + cache_path
-        os.system ( command3 ) 
-    else:
-        nevents = int(command1_output.split()[1].strip())
-
-    d_inputFile_nevents[line] = nevents
-    input_files.append ( line )
-    total_nevents += nevents
-    print "\t", iline, line, int(nevents), int(total_nevents)
+    print "*** Counting number of events in each input file"
+    
+    if not os.path.isfile ( args.input_list ):
+        print "Input list you specified does not exist:"
+        print "\t", args.input_list 
+        print "Specify an existing file to continue"
+        sys.exit()
+    
+    input_list = open ( args.input_list, "r" ) 
+    cache_path = args.input_list.replace(".txt",".cache.txt")
+    if not os.path.isfile ( cache_path ): 
+        os.system ( "touch " + cache_path ) 
+    d_inputFile_nevents = {}
+    input_files = []
+    total_nevents = int(0)
+    for iline, line in enumerate(input_list):
+        line = line.strip()
+        if line == "": continue
+        line = line.replace(",","")
+    
+        command1 = "cat " + cache_path + " | grep " + line
+        command1_output = sp.Popen ( command1, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
+        no_cache = ( command1_output == "" )
+    
+        if no_cache:
+            command2 = "edmFileUtil " + line
+            nevents = int(sp.Popen ( command2, shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")[1].split(",")[2].split("event")[0].strip())
+            command3 = "echo " + line + " " + str(nevents) + " >> " + cache_path
+            os.system ( command3 ) 
+        else:
+            nevents = int(command1_output.split()[1].strip())
+    
+        d_inputFile_nevents[line] = nevents
+        input_files.append ( line )
+        total_nevents += nevents
+        print "\t", iline, line, int(nevents), int(total_nevents)
     
 #----------------------------------------------------------------------------
 # Split up jobs
 #----------------------------------------------------------------------------
 
-print "*** Splitting up jobs:"
+if ( args.input_list ) :
 
-njobs = args.njobs
-nevents_per_job = int(math.ceil (float(total_nevents) / float(njobs)))
-njobs_updated   = int(math.floor(float(total_nevents) / float(nevents_per_job)))
-nevents_in_last_job = total_nevents - ( (njobs_updated - 1) * nevents_per_job ) 
-
-if nevents_in_last_job > nevents_per_job:
-    nevents_per_job = int(math.floor (float(total_nevents) / float(njobs)))
-    njobs_updated   = int(math.ceil(float(total_nevents) / float(nevents_per_job)))
+    print "*** Splitting up jobs:"
+    
+    njobs = args.njobs
+    nevents_per_job = int(math.ceil (float(total_nevents) / float(njobs)))
+    njobs_updated   = int(math.floor(float(total_nevents) / float(nevents_per_job)))
     nevents_in_last_job = total_nevents - ( (njobs_updated - 1) * nevents_per_job ) 
-
-print "\t", "Run a total of", njobs_updated, "jobs"
-print "\t", "Jobs 0-" + str(njobs_updated-2), "will process", nevents_per_job, "events"
-print "\t", "Job", str(njobs_updated-1), "will process", nevents_in_last_job, "events"
-
-l_events_to_skip = []
-l_events_to_process = []
-l_files_to_process = []
-
-for ijob in range(0,njobs_updated):
-    job_min_event = 1 + nevents_per_job * ijob
-    job_max_event = nevents_per_job * (ijob + 1)
     
-    if verbose:
-        print "\t", "Job " + str(ijob)+ ":"
-        print "\t\t", "Events", job_min_event, "-", job_max_event
-
-    total_events_to_skip = job_min_event - 1
-    events_to_process = nevents_per_job
-
-    if ijob == njobs_updated - 1:
-        job_max_event = job_min_event + nevents_in_last_job - 1
-        events_to_process = nevents_in_last_job
-
-    nevents_in_previous_files = 0
-    nevents_before_start_file = 0
-    nevents_after_start_file = 0
-    nevents_before_stop_file = 0
-    nevents_after_stop_file = 0
-    start_file = -1
-    stop_file = -1
-    file_before_start_file = -1
-    file_before_stop_file = -1
-    for i_input_file, input_file in enumerate(input_files):
-        nevents_in_this_file = d_inputFile_nevents[input_file]
-        if job_min_event > nevents_in_previous_files and job_min_event <= ( nevents_in_previous_files + nevents_in_this_file ):
-            start_file = i_input_file
-            file_before_start_file = start_file - 1
-            if start_file == 0:
-                file_before_start_file = 0
-            nevents_before_start_file = nevents_in_previous_files
-            nevents_after_start_file = nevents_in_previous_files + nevents_in_this_file
-        if job_max_event > nevents_in_previous_files and job_max_event <= ( nevents_in_previous_files + nevents_in_this_file ):
-            stop_file = i_input_file
-            file_before_stop_file = stop_file - 1
-            if stop_file == 0:
-                file_before_stop_file = 0
-            nevents_before_stop_file = nevents_in_previous_files
-            nevents_after_stop_file = nevents_in_previous_files + nevents_in_this_file
-            break
-
-        nevents_in_previous_files += nevents_in_this_file
-
-    first_event_in_file = nevents_before_start_file + 1
-    events_to_skip = job_min_event - first_event_in_file
-    n_files_to_process = stop_file - start_file + 1
+    if nevents_in_last_job > nevents_per_job:
+        nevents_per_job = int(math.floor (float(total_nevents) / float(njobs)))
+        njobs_updated   = int(math.ceil(float(total_nevents) / float(nevents_per_job)))
+        nevents_in_last_job = total_nevents - ( (njobs_updated - 1) * nevents_per_job ) 
     
-    if verbose:
-        print "\t\t", "Files", 0, "-", file_before_start_file, "have", nevents_before_start_file, "events < ", job_min_event
-        print "\t\t", "Files", 0, "-", start_file, "have", nevents_after_start_file, "events >=", job_min_event, "so start on file", start_file
-        print "\t\t", "The first event in file", start_file, "is", first_event_in_file
-        print "\t\t", "You want to start on event", job_min_event
-        print "\t\t", "So skip", events_to_skip, "events"
-        print "\t\t", "Process", events_to_process, "events to end on event", job_max_event
-        print "\t\t", "Files", 0, "-", file_before_stop_file, "have", nevents_before_stop_file, "events < ", job_max_event
-        print "\t\t", "Files", 0, "-", stop_file - 0, "have", nevents_after_stop_file, "events >=", job_max_event, "so stop on file", stop_file
-        print "\t\t", "That is a total of", n_files_to_process, "files to process"
-        print "\t\t", "Files are:"
-
-    i_files_to_process = range(start_file, stop_file + 1)
+    print "\t", "Run a total of", njobs_updated, "jobs"
+    print "\t", "Jobs 0-" + str(njobs_updated-2), "will process", nevents_per_job, "events"
+    print "\t", "Job", str(njobs_updated-1), "will process", nevents_in_last_job, "events"
     
-    files_to_process_data = ""
-    for i_file_to_process in i_files_to_process:
-        input_file = input_files[i_file_to_process]
+    l_events_to_skip = []
+    l_events_to_process = []
+    l_files_to_process = []
+    
+    for ijob in range(0,njobs_updated):
+        job_min_event = 1 + nevents_per_job * ijob
+        job_max_event = nevents_per_job * (ijob + 1)
+        
         if verbose:
-            print "\t\t\t", str(i_file_to_process) + str(":"), input_file
-        files_to_process_data += input_file + ",\n"
-    files_to_process_data = files_to_process_data[:-2]
-    files_to_process_data = files_to_process_data.replace("/","\/")
+            print "\t", "Job " + str(ijob)+ ":"
+            print "\t\t", "Events", job_min_event, "-", job_max_event
     
-    if events_to_skip < 0:
-        print "ERROR: nonsensical events to skip:", events_to_skip
-        sys.exit()
-
-    if events_to_process < 0:
-        print "ERROR: nonsensical events to process:", events_to_process
-        sys.exit()
-
-    if len ( i_files_to_process ) <= 0:
-        print "ERROR: nonsensical files to process", i_files_to_process
-        sys.exit()
-        
-    l_events_to_skip.append    ( events_to_skip    )
-    l_events_to_process.append ( events_to_process ) 
-    l_files_to_process.append  ( files_to_process_data  )
-
-#----------------------------------------------------------------------------
-# Split up pileup files
-#----------------------------------------------------------------------------
+        total_events_to_skip = job_min_event - 1
+        events_to_process = nevents_per_job
     
-if ( args.pu_input_list):
-
-    print "*** Splitting up pileup files:"
+        if ijob == njobs_updated - 1:
+            job_max_event = job_min_event + nevents_in_last_job - 1
+            events_to_process = nevents_in_last_job
     
-    l_pu_files_to_process = []
-    total_n_pu_events = int(0)
-    ijob = 0
-    pu_files_to_process_data = ""
-    pu_input_list = open ( args.pu_input_list, "r" ) 
-    cache_path = args.pu_input_list.replace(".txt",".cache.txt")
-    if not os.path.isfile ( cache_path ):
-        os.system ( "touch " + cache_path ) 
-    for iline, line in enumerate(pu_input_list):
-        line = line.strip()
-        if line == "": continue
-        line = line.replace(",","")
-        command1 = "cat " + cache_path + " | grep " + line
-        command1_output = sp.Popen ( command1, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
-        no_cache = ( command1_output == "" )
-
-        if no_cache:
-            command2 = "edmFileUtil " + line
-            n_pu_events = int(sp.Popen ( command2, shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")[1].split(",")[2].split("event")[0].strip())
-            command3 = "echo " + line + " " + str(n_pu_events) + " >> " + cache_path
-            os.system ( command3 ) 
-        else:
-            n_pu_events = int(command1_output.split()[1].strip())
-        total_n_pu_events += n_pu_events
-        print "\t", iline, line, int(n_pu_events), int(total_n_pu_events)
+        nevents_in_previous_files = 0
+        nevents_before_start_file = 0
+        nevents_after_start_file = 0
+        nevents_before_stop_file = 0
+        nevents_after_stop_file = 0
+        start_file = -1
+        stop_file = -1
+        file_before_start_file = -1
+        file_before_stop_file = -1
+        for i_input_file, input_file in enumerate(input_files):
+            nevents_in_this_file = d_inputFile_nevents[input_file]
+            if job_min_event > nevents_in_previous_files and job_min_event <= ( nevents_in_previous_files + nevents_in_this_file ):
+                start_file = i_input_file
+                file_before_start_file = start_file - 1
+                if start_file == 0:
+                    file_before_start_file = 0
+                nevents_before_start_file = nevents_in_previous_files
+                nevents_after_start_file = nevents_in_previous_files + nevents_in_this_file
+            if job_max_event > nevents_in_previous_files and job_max_event <= ( nevents_in_previous_files + nevents_in_this_file ):
+                stop_file = i_input_file
+                file_before_stop_file = stop_file - 1
+                if stop_file == 0:
+                    file_before_stop_file = 0
+                nevents_before_stop_file = nevents_in_previous_files
+                nevents_after_stop_file = nevents_in_previous_files + nevents_in_this_file
+                break
+    
+            nevents_in_previous_files += nevents_in_this_file
+    
+        first_event_in_file = nevents_before_start_file + 1
+        events_to_skip = job_min_event - first_event_in_file
+        n_files_to_process = stop_file - start_file + 1
         
-        pu_files_to_process_data += line + ",\n"
+        if verbose:
+            print "\t\t", "Files", 0, "-", file_before_start_file, "have", nevents_before_start_file, "events < ", job_min_event
+            print "\t\t", "Files", 0, "-", start_file, "have", nevents_after_start_file, "events >=", job_min_event, "so start on file", start_file
+            print "\t\t", "The first event in file", start_file, "is", first_event_in_file
+            print "\t\t", "You want to start on event", job_min_event
+            print "\t\t", "So skip", events_to_skip, "events"
+            print "\t\t", "Process", events_to_process, "events to end on event", job_max_event
+            print "\t\t", "Files", 0, "-", file_before_stop_file, "have", nevents_before_stop_file, "events < ", job_max_event
+            print "\t\t", "Files", 0, "-", stop_file - 0, "have", nevents_after_stop_file, "events >=", job_max_event, "so stop on file", stop_file
+            print "\t\t", "That is a total of", n_files_to_process, "files to process"
+            print "\t\t", "Files are:"
+    
+        i_files_to_process = range(start_file, stop_file + 1)
         
-        if total_n_pu_events > l_events_to_process[ijob]:
-            total_n_pu_events = int(0)
-            pu_files_to_process_data = pu_files_to_process_data[:-2]
-            pu_files_to_process_data = pu_files_to_process_data.replace("/","\/")
-            l_pu_files_to_process.append (str(pu_files_to_process_data))
-            pu_files_to_process_data = ""
-            ijob += 1
-            if ijob == njobs_updated: break
-            continue
+        files_to_process_data = ""
+        for i_file_to_process in i_files_to_process:
+            input_file = input_files[i_file_to_process]
+            if verbose:
+                print "\t\t\t", str(i_file_to_process) + str(":"), input_file
+            files_to_process_data += input_file + ",\n"
+        files_to_process_data = files_to_process_data[:-2]
+        files_to_process_data = files_to_process_data.replace("/","\/")
+        
+        if events_to_skip < 0:
+            print "ERROR: nonsensical events to skip:", events_to_skip
+            sys.exit()
+    
+        if events_to_process < 0:
+            print "ERROR: nonsensical events to process:", events_to_process
+            sys.exit()
+    
+        if len ( i_files_to_process ) <= 0:
+            print "ERROR: nonsensical files to process", i_files_to_process
+            sys.exit()
+            
+        l_events_to_skip.append    ( events_to_skip    )
+        l_events_to_process.append ( events_to_process ) 
+        l_files_to_process.append  ( files_to_process_data  )
+    
+    #----------------------------------------------------------------------------
+    # Split up pileup files
+    #----------------------------------------------------------------------------
+        
+    if ( args.pu_input_list):
+    
+        print "*** Splitting up pileup files:"
+        
+        l_pu_files_to_process = []
+        total_n_pu_events = int(0)
+        ijob = 0
+        pu_files_to_process_data = ""
+        pu_input_list = open ( args.pu_input_list, "r" ) 
+        cache_path = args.pu_input_list.replace(".txt",".cache.txt")
+        if not os.path.isfile ( cache_path ):
+            os.system ( "touch " + cache_path ) 
+        for iline, line in enumerate(pu_input_list):
+            line = line.strip()
+            if line == "": continue
+            line = line.replace(",","")
+            command1 = "cat " + cache_path + " | grep " + line
+            command1_output = sp.Popen ( command1, shell=True, stdout=sp.PIPE ).communicate()[0].strip()
+            no_cache = ( command1_output == "" )
+    
+            if no_cache:
+                command2 = "edmFileUtil " + line
+                n_pu_events = int(sp.Popen ( command2, shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")[1].split(",")[2].split("event")[0].strip())
+                command3 = "echo " + line + " " + str(n_pu_events) + " >> " + cache_path
+                os.system ( command3 ) 
+            else:
+                n_pu_events = int(command1_output.split()[1].strip())
+            total_n_pu_events += n_pu_events
+            print "\t", iline, line, int(n_pu_events), int(total_n_pu_events)
+            
+            pu_files_to_process_data += line + ",\n"
+            
+            if total_n_pu_events > l_events_to_process[ijob]:
+                total_n_pu_events = int(0)
+                pu_files_to_process_data = pu_files_to_process_data[:-2]
+                pu_files_to_process_data = pu_files_to_process_data.replace("/","\/")
+                l_pu_files_to_process.append (str(pu_files_to_process_data))
+                pu_files_to_process_data = ""
+                ijob += 1
+                if ijob == njobs_updated: break
+                continue
 
+else:
+    njobs_updated = args.njobs
 
 #----------------------------------------------------------------------------
 # Make python configurations
@@ -310,7 +317,7 @@ cfg_file_paths = []
 output_files = []
 
 for ijob in range (0, njobs_updated):
-    new_cfg_file_name = args.input_python_cfg.replace("_cfg.py", "_" + str(ijob) + "_cfg.py")
+    new_cfg_file_name = args.input_python_cfg.replace(".py", "_" + str(ijob) + ".py")
     new_cfg_file_path = workdir_python_cfgs + "/" + os.path.basename(new_cfg_file_name)
     
     output_file_prefix = args.output_file + "_" + str(ijob)
@@ -318,18 +325,27 @@ for ijob in range (0, njobs_updated):
     
     cp_command     = "cp " + args.input_python_cfg + " " + new_cfg_file_path
     
-    perl_command_1 = "perl -pi -e 's/#FILENAMES/"     + str(l_files_to_process [ijob]) + "/g' " + new_cfg_file_path
-    perl_command_2 = "perl -pi -e 's/#SKIPEVENTS/"    + str(l_events_to_skip   [ijob]) + "/g' " + new_cfg_file_path
-    perl_command_3 = "perl -pi -e 's/#PROCESSEVENTS/" + str(l_events_to_process[ijob]) + "/g' " + new_cfg_file_path
+    if ( args.input_list ) :
+        perl_command_1 = "perl -pi -e 's/#FILENAMES/"     + str(l_files_to_process [ijob]) + "/g' " + new_cfg_file_path
+        perl_command_2 = "perl -pi -e 's/#SKIPEVENTS/"    + str(l_events_to_skip   [ijob]) + "/g' " + new_cfg_file_path
+        perl_command_3 = "perl -pi -e 's/#PROCESSEVENTS/" + str(l_events_to_process[ijob]) + "/g' " + new_cfg_file_path
+    else:
+        perl_command_3 = "perl -pi -e 's/#PROCESSEVENTS/" + str(args.events_per_job) + "/g' " + new_cfg_file_path
+
     perl_command_4 = "perl -pi -e 's/OUTPUTFILENAME/" + str(output_file_prefix       ) + "/g' " + new_cfg_file_path
     perl_command_5 = "perl -pi -e 's/GLOBALTAG/"      + str(args.global_tag          ) + "/g' " + new_cfg_file_path
+    perl_command_6 = "perl -pi -e 's/#JOBNUMBER/"     + str(ijob + 1000) + "/g' " + new_cfg_file_path
     
-    os.system ( cp_command     )
-    os.system ( perl_command_1 )
-    os.system ( perl_command_2 )
+    os.system ( cp_command  )
+
+    if ( args.input_list ) :
+        os.system ( perl_command_1 )
+        os.system ( perl_command_2 )
+        
     os.system ( perl_command_3 )
     os.system ( perl_command_4 )
     os.system ( perl_command_5 )
+    os.system ( perl_command_6 )
 
     if args.pu_input_list :
         perl_command_6 = "perl -pi -e 's/#PILEUPFILENAMES/" + l_pu_files_to_process[ijob] + "/g' " + new_cfg_file_path

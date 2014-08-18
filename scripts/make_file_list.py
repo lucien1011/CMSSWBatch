@@ -3,8 +3,15 @@
 #----------------------------------------------------------------------------
 
 import subprocess as sp
-import sys, os
+import sys, os, re
 import argparse
+
+def atoi(text):
+    return int(text) if text.isdigit() else text
+
+def natural_keys(text):
+    return [ atoi(c) for c in re.split('(\d+)', text) ]
+
 
 #----------------------------------------------------------------------------
 # Get input and output folders
@@ -51,7 +58,7 @@ if use_eos and at_cern:
     eos_bin = sp.Popen ( "find /afs/cern.ch/project/eos/installation/ -name 'eos.select' | xargs ls -rt1 | tail -1", shell=True, stdout=sp.PIPE ).communicate()[0].strip()
     ls_command = eos_bin + " ls " 
 else:
-    ls_command = "ls "
+    ls_command = "ls -1v "
 
 #----------------------------------------------------------------------------
 # Get list of file paths 
@@ -67,6 +74,8 @@ for folder in args.input_folders:
         file_paths = file_paths + ["\"dcache:" + folder + "/" + i + "\"," for i in files]
     else:
         file_paths = file_paths + ["\"file:" + folder + "/" + i + "\"," for i in files]
+
+file_paths.sort(key=natural_keys)
 
 #----------------------------------------------------------------------------
 # If the output directory does not exist, create it
