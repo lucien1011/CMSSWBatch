@@ -1,5 +1,5 @@
 python scripts/launch_analysis.py \
--c ../tmp/QQH1352T_Tauola_14TeV_cfi_GEN_SIM.py \
+-c ../HGCALANA/HgcalTupleMaker/mc_production/QQH1352T_Tauola_14TeV_cfi_GEN_SIM.py \
 -w $PWD/work/HgcalRelVal_QQH_GEN-SIM/ \
 -n 100 \
 -ej 10 \

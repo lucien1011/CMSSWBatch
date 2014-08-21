@@ -1,5 +1,5 @@
 python scripts/launch_analysis.py \
--c ../tmp/step3_RAW2DIGI_L1Reco_RECO.py \
+-c ../HGCALANA/HgcalTupleMaker/mc_production/step3_RAW2DIGI_L1Reco_RECO.py \
 -w $PWD/work/HgcalRelVal_QQH_RECO \
 -n 100 \
 -q 1nh \

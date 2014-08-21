@@ -1,5 +1,5 @@
 python scripts/check_output.py \
--c ../tmp/step2_DIGI_L1_DIGI2RAW.py \
+-c ../HGCALANA/HgcalTupleMaker/mc_production/step2_DIGI_L1_DIGI2RAW.py \
 -w $PWD/work/HgcalRelVal_QQH_DIGI-RAW \
 -n 100 \
 -q 1nh \
