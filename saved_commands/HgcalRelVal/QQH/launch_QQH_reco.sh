@@ -1,7 +1,7 @@
 python scripts/launch_analysis.py \
 -c ../HGCALANA/HgcalTupleMaker/mc_production/step3_RAW2DIGI_L1Reco_RECO.py \
 -w $PWD/work/HgcalRelVal_QQH_RECO \
--n 100 \
+-n 1 \
 -q 1nh \
 -i file_lists/HgcalRelVal_QQH_DIGI-RAW/inputListAll.txt \
 -o HgcalRelVal_QQH_MC_RECO \
