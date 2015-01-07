@@ -156,7 +156,7 @@ else:
 
 print "*** Extra check for jobs with errors in their logs"
 
-bad_strings = ["exit code", "abort"]
+bad_strings = ["exit code", "abort", "job killed"]
 
 if at_cern:
     grep_command = "ls " + log_file_folder + "/*.log | xargs egrep -i '"
