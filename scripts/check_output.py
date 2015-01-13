@@ -69,27 +69,27 @@ print "Found", len (all_jobs), "job(s)"
 
 print "*** Getting job numbers that are still running:", 
 
-if at_fnal:
-    lines = sp.Popen ("condor_q -submitter " + os.environ["USER"], shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")
-    for line in lines:
-        line = line.strip()
-        if line == "": continue
-        if "Submitter" in line: continue
-        if "SUBMITTED" in line: continue
-        if "suspended" in line: continue
-        job_number = int(line.split()[-1].split("submit_")[1].split(".sh")[0])
-        running_jobs.append ( job_number ) 
-
-if at_cern:
-    lines = sp.Popen ("bjobs", shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")
-    for line in lines:
-        line = line.strip()
-        if line == "": continue
-        if "JOBID" in line: continue
-        job_number = int (line.split()[6].split("_")[1].split(".sh")[0])
-        running_jobs.append ( job_number ) 
-
-print "Found", len(all_jobs) - len (running_jobs), "job(s) done running"
+# if at_fnal:
+#     lines = sp.Popen ("condor_q -submitter " + os.environ["USER"], shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")
+#     for line in lines:
+#         line = line.strip()
+#         if line == "": continue
+#         if "Submitter" in line: continue
+#         if "SUBMITTED" in line: continue
+#         if "suspended" in line: continue
+#         job_number = int(line.split()[-1].split("submit_")[1].split(".sh")[0])
+#         running_jobs.append ( job_number ) 
+# 
+# if at_cern:
+#     lines = sp.Popen ("bjobs", shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")
+#     for line in lines:
+#         line = line.strip()
+#         if line == "": continue
+#         if "JOBID" in line: continue
+#         job_number = int (line.split()[6].split("_")[1].split(".sh")[0])
+#         running_jobs.append ( job_number ) 
+# 
+# print "Found", len(all_jobs) - len (running_jobs), "job(s) done running"
 
 #----------------------------------------------------------------------------
 # Make sure that the following are all there for each job
@@ -156,7 +156,7 @@ else:
 
 print "*** Extra check for jobs with errors in their logs"
 
-bad_strings = ["exit code", "abort", "job killed"]
+bad_strings = ["exit code", "abort", "job killed", "Last server error", "system error"]
 
 if at_cern:
     grep_command = "ls " + log_file_folder + "/*.log | xargs egrep -i '"
