@@ -67,8 +67,7 @@ print "Found", len (all_jobs), "job(s)"
 # Get list of jobs running
 #----------------------------------------------------------------------------
 
-print "*** Getting job numbers that are still running:", 
-
+# print "*** Getting job numbers that are still running:", 
 # if at_fnal:
 #     lines = sp.Popen ("condor_q -submitter " + os.environ["USER"], shell=True, stdout=sp.PIPE ).communicate()[0].split("\n")
 #     for line in lines:
@@ -95,22 +94,9 @@ print "*** Getting job numbers that are still running:",
 # Make sure that the following are all there for each job
 # - log file
 # - output (on local disk or on EOS)
-# - python cfg 
 #----------------------------------------------------------------------------
 
 print "*** Checking", len (all_jobs) - len(running_jobs), "job(s)"
-
-cfg_file_folder = args.workdir + "/python_cfgs/"
-for job_number in all_jobs:
-    if job_number in bad_jobs: continue
-    if job_number in running_jobs: continue
-    cfg_file_name = os.path.basename(args.input_python_cfg).replace(".py","_" + str(job_number) + ".py")
-    cfg_file_path = cfg_file_folder + "/" + cfg_file_name
-    if not os.path.isfile ( cfg_file_path ):
-        print "\tMissing python cfg file for job:", job_number
-        bad_jobs.append ( job_number )
-
-print "*** Of those jobs,", len ( all_jobs ) - len (bad_jobs) - len(running_jobs), "have python cfg files"
 
 log_file_folder = args.workdir + "/log/"
 for job_number in all_jobs:
@@ -156,7 +142,7 @@ else:
 
 print "*** Extra check for jobs with errors in their logs"
 
-bad_strings = ["exit code", "abort", "job killed", "Last server error", "system error"]
+bad_strings = ["exit code", "abort", "job killed", "Last server error", "system error", "Fatal Exception"]
 
 if at_cern:
     grep_command = "ls " + log_file_folder + "/*.log | xargs egrep -i '"
