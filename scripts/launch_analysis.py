@@ -19,10 +19,10 @@ parser.add_argument('-n', metavar='NJOBS'      , dest='njobs'           ,action=
 parser.add_argument('-i', metavar='INPUTLIST'  , dest='input_list'      ,action="store", required=False, help='Input list of files to run on')
 parser.add_argument('-p', metavar='PUINPUTLIST', dest='pu_input_list'   ,action="store", required=False, help='Input list of files for pileup')
 parser.add_argument('-o', metavar='OUTPUTFILE' , dest='output_file'     ,action="store", required=True , help='Name of the output file')
-parser.add_argument('-t', metavar='GLOBALTAG'  , dest='global_tag'      ,action="store", required=True , help='GlobalTag to use')
 parser.add_argument('-q', metavar='QUEUE'      , dest='queue'           ,action="store", required=False, help='Batch queue (only needed at CERN)')
 parser.add_argument('-e', metavar='EOSDIR'     , dest='eos_directory'   ,action="store", required=False, help='EOS output directory (optional)')
 parser.add_argument('-s', metavar='SHORT'      , dest='short'           ,action="store", required=False, help='Run on the "SHORT" queue at FNAL (optional)')
+parser.add_argument('-t', metavar='GLOBALTAG'  , dest='global_tag'      ,action="store", required=True , help='GlobalTag to use')
 parser.add_argument('-ej',metavar="EVENTS_JOB" , dest="events_per_job"  ,action="store", required=False, help='If generating samples, how many events per job? (optional)') 
 
 args = parser.parse_args()
@@ -240,7 +240,6 @@ if ( args.input_list ) :
                 print "\t\t\t", str(i_file_to_process) + str(":"), input_file
             files_to_process_data += input_file + ",\n"
         files_to_process_data = files_to_process_data[:-2]
-        files_to_process_data = files_to_process_data.replace("/","\/")
         
         if events_to_skip < 0:
             print "ERROR: nonsensical events to skip:", events_to_skip
@@ -311,47 +310,19 @@ else:
 # Make python configurations
 #----------------------------------------------------------------------------
 
-print "*** Making python cfgs"
+print "*** Making python cfg"
 
 cfg_file_paths = []
 output_files = []
 
+new_cfg_file_path = workdir_python_cfgs + "/" + os.path.basename ( args.input_python_cfg ) 
+cp_command = "cp " + args.input_python_cfg + " " + new_cfg_file_path
+os.system ( cp_command )
+
 for ijob in range (0, njobs_updated):
-    new_cfg_file_name = args.input_python_cfg.replace(".py", "_" + str(ijob) + ".py")
-    new_cfg_file_path = workdir_python_cfgs + "/" + os.path.basename(new_cfg_file_name)
-    
+
     output_file_prefix = args.output_file + "_" + str(ijob)
     output_file = output_file_prefix + ".root"
-    
-    cp_command     = "cp " + args.input_python_cfg + " " + new_cfg_file_path
-    
-    if ( args.input_list ) :
-        perl_command_1 = "perl -pi -e 's/#FILENAMES/"     + str(l_files_to_process [ijob]) + "/g' " + new_cfg_file_path
-        perl_command_2 = "perl -pi -e 's/#SKIPEVENTS/"    + str(l_events_to_skip   [ijob]) + "/g' " + new_cfg_file_path
-        perl_command_3 = "perl -pi -e 's/#PROCESSEVENTS/" + str(l_events_to_process[ijob]) + "/g' " + new_cfg_file_path
-    else:
-        perl_command_3 = "perl -pi -e 's/#PROCESSEVENTS/" + str(args.events_per_job) + "/g' " + new_cfg_file_path
-
-    perl_command_4 = "perl -pi -e 's/OUTPUTFILENAME/" + str(output_file_prefix       ) + "/g' " + new_cfg_file_path
-    perl_command_5 = "perl -pi -e 's/GLOBALTAG/"      + str(args.global_tag          ) + "/g' " + new_cfg_file_path
-    perl_command_6 = "perl -pi -e 's/#JOBNUMBER/"     + str(ijob + 1000) + "/g' " + new_cfg_file_path
-    
-    os.system ( cp_command  )
-
-    if ( args.input_list ) :
-        os.system ( perl_command_1 )
-        os.system ( perl_command_2 )
-        
-    os.system ( perl_command_3 )
-    os.system ( perl_command_4 )
-    os.system ( perl_command_5 )
-    os.system ( perl_command_6 )
-
-    if args.pu_input_list :
-        perl_command_6 = "perl -pi -e 's/#PILEUPFILENAMES/" + l_pu_files_to_process[ijob] + "/g' " + new_cfg_file_path
-        os.system ( perl_command_6 )
-        
-    cfg_file_paths.append ( new_cfg_file_path ) 
     output_files.append ( output_file )
 
 #----------------------------------------------------------------------------
@@ -373,7 +344,15 @@ for ijob in range (0, njobs_updated):
         if not os.path.isdir ( scratch_dir ):
             os.system ( "mkdir " + scratch_dir )
         src_file.write("cd " + scratch_dir + "\n")
-        src_file.write("cmsRun " + cfg_file_paths[ijob] + "\n")
+
+        file_string = str(l_files_to_process[ijob]).replace("\n","")
+
+        cmsRun_command  = "cmsRun " + new_cfg_file_path + " "
+        cmsRun_command += "inputFiles=" + str(file_string) + " "
+        cmsRun_command += "outputFile=" + str(output_files[ijob]) + " "
+        cmsRun_command += "skipEvents=" + str(l_events_to_skip[ijob]) + " "
+        cmsRun_command += "processEvents=" + str(l_events_to_process[ijob])
+        src_file.write(cmsRun_command + "\n")
         src_file.write("xrdcp " + output_files[ijob] + " root://eoscms/" + args.eos_directory.strip() + "/" + output_files[ijob] + "\n")
         src_file.write("rm " + output_files[ijob])
     if at_fnal:
