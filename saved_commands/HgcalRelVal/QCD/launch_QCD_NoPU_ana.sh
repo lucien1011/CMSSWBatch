@@ -6,4 +6,4 @@ python scripts/launch_analysis.py \
 -i file_lists/HgcalRelVal_QCD_NoPU_RECO/inputListAll.txt \
 -o HgcalRelVal_QCD_NoPU_MC_ANA \
 -t "auto:mc" \
--e /eos/cms/store/user/eberry/HGCAL/HgcalRelVal_QCD_NoPU_MC_SLHC22_ANA/
+-e /eos/cms/store/user/eberry/HGCAL/HgcalRelVal_QCD_NoPU_MC_SLHC23patch2_ANA/
