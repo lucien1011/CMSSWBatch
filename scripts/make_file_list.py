@@ -21,6 +21,7 @@ def natural_keys(text):
 parser = argparse.ArgumentParser(description='Make an input list')
 parser.add_argument('-i', metavar='INPUT' , dest='input_folders',action="append", required=True, help='List of EOS or dCache folders to be used as input')
 parser.add_argument('-o', metavar="OUTPUT", dest='output_folder',action="store" , required=True, help='Output folder where input list will be stored')
+parser.add_argument('-e', metavar="use_eos", dest='use_eos',action="store", required=False, help='input EOS folder')
 args = parser.parse_args()
 
 #----------------------------------------------------------------------------
@@ -34,7 +35,10 @@ at_cern = ("cern.ch"  in os.environ["HOSTNAME"])
 # Is there an EOS folder in our directories?
 #----------------------------------------------------------------------------
 
-use_eos = False
+if hasattr(args,"use_eos"):
+	use_eos = args.use_eos
+else:
+	use_eos = False
 for input_folder in args.input_folders:
     if "/eos/" in input_folder:
         use_eos = True
