@@ -3,3 +3,5 @@
 launch.sh
 work
 !/.gitignore
+*.pyc
+file_list
