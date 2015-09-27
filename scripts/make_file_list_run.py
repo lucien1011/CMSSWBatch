@@ -53,6 +53,7 @@ print "------------------Summary------------------"
 print "==========================================="
 print "Total number of required runs: %s"%len(runList)
 print "Total number of valid runs: %s"%len(validRunList)
+print "Total number of files: %s"%len(filePathList)
 runString = ""
 for validRun in validRunList:
 	runString += "%s "%validRun
