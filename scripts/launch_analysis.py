@@ -351,7 +351,8 @@ for ijob in range (0, njobs_updated):
         cmsRun_command += "inputFiles=" + str(file_string) + " "
         cmsRun_command += "outputFile=" + str(output_files[ijob]) + " "
         cmsRun_command += "skipEvents=" + str(l_events_to_skip[ijob]) + " "
-        cmsRun_command += "processEvents=" + str(l_events_to_process[ijob])
+	cmsRun_command += "processEvents=" + str(l_events_to_process[ijob]) + " "
+	cmsRun_command += "globalTag=" + str(args.global_tag) 
         src_file.write(cmsRun_command + "\n")
         src_file.write("xrdcp " + output_files[ijob] + " root://eoscms/" + args.eos_directory.strip() + "/" + output_files[ijob] + "\n")
         src_file.write("rm " + output_files[ijob])
