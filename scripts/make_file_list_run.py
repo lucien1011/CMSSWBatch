@@ -10,6 +10,7 @@ parser.add_argument('-s', metavar="runstep", dest='runStep',action="store" , req
 
 parser.add_argument('-p', metavar="PD", dest='dataset',action="store" , required=True, help='the PD',type=str)
 parser.add_argument('-o', metavar="output", dest='output_folder',action="store" , required=True, help='output folder where input list will be stored',type=str)
+parser.add_argument('-w', metavar="write", dest="write", action="store", required=False, help='write to output folder',type=bool,default=True)
 
 args = parser.parse_args()
 outdir = args.output_folder
@@ -42,10 +43,11 @@ for run in runList:
 if not os.path.isdir ( outdir ):
 	os.system ( "mkdir -p " + outdir )
 
-file = open(outdir+"/inputListAll.txt","w")
-for filePath in filePathList:
-	file.write("\""+filePath+"\",\n")
-file.close()
+if args.write:
+	file = open(outdir+"/inputListAll.txt","w")
+	for filePath in filePathList:
+		file.write("\""+filePath+"\",\n")
+	file.close()
 
 validRunList.sort()
 print "==========================================="
